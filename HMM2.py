@@ -1,14 +1,15 @@
-def create_matricies():
+# import sys
+def create_matricies(args):
     A = []
     B = []
     Pi = []
-    for i in input().split():
+    for i in args[0].split():
         A.append(float(i))
     
-    for j in input().split():
+    for j in args[1].split():
         B.append(float(j))
         
-    for k in input().split():
+    for k in args[2].split():
         Pi.append(float(k))
 
     rows_n = int(A[0])
@@ -48,23 +49,43 @@ def get_column(mat, column_index):
     values = [row[column_index] for row in mat]
     return values
 
-def viterbi(A, B, Pi, observations):
-    delta = []
-    temp_list = []
-    for i in range(len(Pi[0])):
-        temp_list.append(Pi[0][i] * B[i][observations[0]])
-    delta.append(temp_list)
-    for t in range(1, len(observations)):
-        temp_list = []
-        for i in range(len(A)):
-            probability = max(delta[t-1][j] * A[j][i] * B[i][observations[t]] for j in range(len(A)))
-            temp_list.append(probability)
-        delta.append(temp_list)
+def argmax(x):
+    return max(range(len(x)), key=lambda i: x[i])
 
-    # Argmax
-    for row in delta:
-        idx = row.index(max(row))
-        print(idx, end=" ", flush=True)
+def viterbi(A, B, Pi, observations):
+    # Important lengths
+    A_len = len(A)
+    O_len = len(observations)
+    
+    # Initialize lists
+    delta =         [[0 for i in range(O_len)] for j in range(A_len)]
+    delta_index =   [[0 for i in range(O_len-1)] for j in range(A_len)]
+
+    # Initialize delta for later dynamic programming
+    initialization = multiply(Pi[0], [el[observations[0]] for el in B])
+    ## Set first column in delta to initialization vector
+    for row in range(A_len):
+        test = delta[row][0]
+        delta[row][0] = initialization[row]
+
+    # Build delta and delta_index through dynamic programming
+    for n in range(1, O_len):
+        for i in range(A_len):
+            # temp = multiply(A[::][i], delta[::][n-1])
+            temp = multiply([el[i] for el in A], [el[n-1] for el in delta])
+            delta[i][n] = max(temp) * B[i][observations[n]]
+            argmax1 = argmax(temp)
+            delta_index[i][n-1] = argmax(temp)
+    
+    # Perform backtracking to find optimal path
+    ## Initialize path
+    path = [0 for i in range(O_len)]
+    path[-1] = argmax([el[i] for el in delta])
+    # Perform backtracking
+    for n in range(len(observations)-2, -1, -1):
+        path[n] = delta_index[path[n+1]][n]
+
+    return path
 
 def main():
     """
@@ -74,15 +95,23 @@ def main():
     Pi is the initial probability matrix
     Observations is the list containing previous states
     """
-    A, B, Pi = create_matricies()
+    # args = sys.argv[1:]
+    args = []
+    args.append(input())
+    args.append(input())
+    args.append(input())
+    args.append(input())
+    A, B, Pi = create_matricies(args)
     observations = []
-    for i in input().split():
+    for i in args[3].split():
         observations.append(int(i))
     
     observations_n = observations[0]
     observations = observations[1:]
 
-    viterbi(A, B, Pi, observations)
+    path = viterbi(A, B, Pi, observations)
+
+    print(' '.join(map(str, path)))
 
 if __name__ == "__main__":
     main()
