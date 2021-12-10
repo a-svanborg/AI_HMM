@@ -1,4 +1,4 @@
-import sys
+#import sys
 def create_matricies(args):
     A = []
     B = []
@@ -41,87 +41,74 @@ def create_matricies(args):
 
     return A_matrix, B_matrix, Pi_matrix
 
-def multiply(matA, matB):
-    multiplied = [a*b for a, b in zip(matA,matB)]
-    return multiplied
-
 def new_alpha_pass(A, B, Pi, observations):
     alpha_list = []
+    scale_factors = []
     for t in range(len(observations)):
         temp_alpha_list = []
+        scale_sum = 0
         for i in range(len(A)):
             if t == 0:
                 temp_alpha_list.append(Pi[0][i] * B[i][observations[t]])
+                scale_sum += Pi[0][i] * B[i][observations[t]]
             else:
-                sum_ = 0
-                for j in range(len(A)):
-                    sum_ += alpha_list[t-1][j] * A[j][i]
-                temp_alpha_list.append(sum_ * B[i][observations[t]])
+                sum_ = sum([alpha_list[t-1][j] * A[j][i] * B[i][observations[t]] for j in range(len(A))])
+                temp_alpha_list.append(sum_)
+                scale_sum += sum_
+        scale = 1/scale_sum
+        scale_factors.append(scale)
+        temp_alpha_list = [scale * x for x in temp_alpha_list]
         alpha_list.append(temp_alpha_list)
-    return alpha_list
+    return alpha_list, scale_factors
 
-def beta_pass(A, B, Pi, observations):
-    beta = []
-    for i in range(len(observations)):
-        beta.append("")
+def beta_pass(A, B, Pi, observations, scale_factors):
+    beta = [0 for i in range(len(observations))]
     for t in reversed(range(len(observations))): #T
         temp_beta = []
         for i  in range(len(A)): #N
             if t == len(observations) - 1:
-                temp_beta.append(1)
+                temp_beta.append(scale_factors[t])
             else:
-                sum_ = 0
-                for j in range(len(A)):
-                    sum_ += beta[t+1][j] * B[j][observations[t+1]] * A[i][j] #* observations[t]
-                temp_beta.append(sum_)
+                sum_ = sum([beta[t+1][j] * A[i][j] * B[j][observations[t+1]] for j in range(len(A))])
+                temp_beta.append(sum_ * scale_factors[t])
         beta[t] = temp_beta
     return beta
 
 def gamma_digamma(A, B ,Pi, observations, alpha, beta):
-    digamma = []
-    gamma = []
+    digamma = [0 for t in range(len(observations)-1)]
+    gamma = [0 for t in range(len(observations)-1)]
     for t in range(len(observations)-1):
-        temp_digamma = []
-        temp_gamma = []
+        temp_digamma = [0 for t in range(len(A))]
+        temp_gamma = [0 for t in range(len(A))]
         for i in range(len(A)):
-            temp2_gamma = []
-            gamma_i = 0
+            temp2_gamma = [0 for t in range(len(B))]
             for j in range(len(B)):
-                gamma_ij = alpha[t][i] * A[i][j] * B[j][observations[t+1]] * beta[t+1][j]
-                temp2_gamma.append(gamma_ij)
-                gamma_i += gamma_ij
-            temp_gamma.append(gamma_i)
-            temp_digamma.append(temp2_gamma)
-        digamma.append(temp_digamma)
-        gamma.append(temp_gamma)
+                temp2_gamma[j] = alpha[t][i] * A[i][j] * B[j][observations[t+1]] * beta[t+1][j]
+            temp_gamma[i] = sum(temp2_gamma)
+            temp_digamma[i] = temp2_gamma
+        digamma[t] = temp_digamma
+        gamma[t] = temp_gamma
     return digamma, gamma
-
-def get_column(mat, column_index):
-    values = [row[column_index] for row in mat]
-    return values
 
 def re_estimate(gamma, digamma, A, B, Pi, observations):
     # A
     new_A = []
     for i in range(len(A)):
-        gamma_sum = 0
         temp_new_A = []
-        for t in range(len(observations)-1):
-            gamma_sum += gamma[t][i]
+        gamma_sum = sum([gamma[t][i] for t in range(len(observations)-1)])
         for j in range(len(A)):
             digamma_sum = 0
             for t in range(len(observations)-1):
-                digamma_sum += digamma[t][i][j]
+                test = digamma[t][i]
+                digamma_sum += test[j]
             temp_new_A.append(digamma_sum/gamma_sum)
         new_A.append(temp_new_A)
     
     # B
     new_B = []
     for j in range(len(A)):
-        gamma_sum = 0
         temp_new_B = []
-        for t in range(len(observations)-1):
-            gamma_sum += gamma[t][j]
+        gamma_sum = sum([gamma[t][j] for t in range(len(observations)-1)])
         for k in range(len(set(observations))):
             digamma_sum = 0
             for t in range(len(observations)-1):
@@ -131,19 +118,30 @@ def re_estimate(gamma, digamma, A, B, Pi, observations):
         new_B.append(temp_new_B)
 
     # Pi
-    new_Pi = []
-    for i in range(len(A)):
-        new_Pi.append(gamma[0][i])
-    new_Pi = [new_Pi]
+    new_Pi = [[gamma[0][i] for i in range(len(A))]]
 
     return new_A, new_B, new_Pi
 
 def baum_welch(A, B, Pi, observations):
-    for t in range(20):
-        alpha = new_alpha_pass(A, B, Pi, observations)
-        beta = beta_pass(A, B, Pi, observations)
+    for t in range(40):
+        alpha, scale_factors = new_alpha_pass(A, B, Pi, observations)
+        beta = beta_pass(A, B, Pi, observations, scale_factors)
         digamma, gamma = gamma_digamma(A, B, Pi, observations, alpha, beta)
         A, B, Pi = re_estimate(gamma, digamma, A, B, Pi, observations)
+    return A, B
+
+
+def print_matrix(matrix):
+    list_to_print = []
+    list_to_print.append(len(matrix))
+    list_to_print.append(len(matrix[0]))
+
+    for row in matrix:
+        for entry in row:
+            list_to_print.append(round(entry, 6))
+
+    for e in list_to_print:
+        print(e, end=" ", flush=True)
     
 
 def main():
@@ -154,7 +152,12 @@ def main():
     Pi is the initial probability matrix
     Observations is the list containing previous states
     """
-    args = sys.argv[1:]
+    #args = sys.argv[1:]
+    args = []
+    args.append(input())
+    args.append(input())
+    args.append(input())
+    args.append(input())
     A, B, Pi = create_matricies(args)
     observations = []
     for i in args[3].split():
@@ -162,7 +165,10 @@ def main():
     
     observations_n = observations[0]
     observations = observations[1:]
-    baum_welch(A,B,Pi,observations)
+    A, B = baum_welch(A,B,Pi,observations)
+    print_matrix(A)
+    print("")
+    print_matrix(B)
 
 if __name__ == "__main__":
     main()
